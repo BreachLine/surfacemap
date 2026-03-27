@@ -37,6 +37,9 @@ class ScanDatabase:
                     completed_at TEXT,
                     total_assets INTEGER DEFAULT 0,
                     live_assets INTEGER DEFAULT 0,
+                    risk_score INTEGER,
+                    risk_grade TEXT,
+                    executive_summary TEXT,
                     stats_json TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
@@ -90,8 +93,8 @@ class ScanDatabase:
                 """
                 INSERT OR REPLACE INTO scans
                 (scan_id, target, started_at, completed_at, total_assets,
-                 live_assets, stats_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                 live_assets, risk_score, risk_grade, executive_summary, stats_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.scan_id,
@@ -100,6 +103,9 @@ class ScanDatabase:
                     result.completed_at,
                     stats["total_assets"],
                     stats["live_assets"],
+                    getattr(result, "risk_score", None),
+                    getattr(result, "risk_grade", None),
+                    getattr(result, "executive_summary", None),
                     json.dumps(stats),
                 ),
             )

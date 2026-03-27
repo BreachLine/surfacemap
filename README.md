@@ -1,214 +1,267 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/python-3.11+-green" alt="Python">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
+  <img src="https://img.shields.io/badge/modules-35+-orange" alt="Modules">
+</p>
+
 # SurfaceMap
 
-**LLM-driven attack surface discovery. Find every external asset from just a company name.**
+**LLM-driven attack surface discovery by [BreachLine Labs](https://breachline.io)**
 
-SurfaceMap combines passive OSINT techniques, DNS enumeration, HTTP probing, port scanning, cloud bucket enumeration, and LLM intelligence to build a complete map of an organization's attack surface.
+Find every external asset from just a company name. SurfaceMap combines 35+ OSINT data sources, DNS enumeration, HTTP probing, port scanning, vulnerability detection, and LLM intelligence to build a complete map of an organization's attack surface.
 
 ---
+
+## Features
+
+- **Phase 0: LLM Brainstorm** - Deep intelligence gathering with web search enrichment (DuckDuckGo)
+- **Phase 1: Passive Recon** - 20+ concurrent OSINT sources (AnubisDB, CertSpotter, crt.sh, RapidDNS, SubdomainCenter, HackerTarget, Wayback, URLScan, CommonCrawl, and more)
+- **Phase 2: Active Probing** - HTTP probe, port scan (nmap), SSL/TLS analysis, sensitive path fuzzing (60+ paths), JS analysis, CORS check, cookie security, cloud bucket enumeration, subdomain takeover (34 providers + NXDOMAIN detection)
+- **Phase 3: LLM Analysis** - Risk scoring (A-F grade), attack path analysis, executive summary, false positive filtering, Google dorks
+- **Interactive Mindmap** - D3.js visualization with zoom/pan, collapsible nodes, dark theme
+- **Dashboard View** - Searchable/filterable/sortable asset table with TXT/CSV/JSON export
+- **Zero-config start** - Just provide a domain, no API keys required for core features
 
 ## Quick Start
 
 ```bash
 # Install
-pip install -e ".[all]"
+pip install surfacemap[all]
 
-# Set your LLM API key
-export GEMINI_API_KEY="your-key-here"
+# Set your LLM API key (optional but recommended)
+surfacemap set-key GEMINI_API_KEY your-key-here
 
-# Discover everything about a company
-surfacemap discover "Acme Corp" --domain acme.com --tree --json
+# Discover everything about a target
+surfacemap discover facebook.com --json --mindmap
 
-# Or just scan a domain
-surfacemap discover example.com --mindmap
+# Passive only (faster, no active probing)
+surfacemap discover example.com --passive-only --json
+
+# With enrichment APIs (VirusTotal, Shodan, GitHub)
+surfacemap discover target.com --enrich --json --mindmap
 ```
 
 ## Installation
 
 ```bash
 # Core (CLI + discovery)
-pip install -e .
+pip install surfacemap
 
-# With API server
-pip install -e ".[api]"
+# With all extras (API server, LLM, notifications)
+pip install surfacemap[all]
 
-# With LLM intelligence
-pip install -e ".[llm]"
-
-# With Slack notifications
-pip install -e ".[notifications]"
-
-# Everything
+# From source
+git clone https://github.com/BreachLine/surfacemap.git
+cd surfacemap
 pip install -e ".[all]"
 ```
 
-### External Tools (Optional)
+**Requirements:** Python 3.11+, optional: `dig`, `nmap`, `subfinder`
 
-SurfaceMap works without these, but they enhance discovery:
+## CLI Commands
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| `dig` | DNS record enumeration | Included with most OS |
-| `nmap` | Port scanning | `brew install nmap` / `apt install nmap` |
-| `subfinder` | Passive subdomain enum | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
+| Command | Description |
+|---------|-------------|
+| `surfacemap discover <target>` | Run attack surface scan |
+| `surfacemap export <scan.json>` | Export assets (txt/csv/json/domains/live/subdomains) |
+| `surfacemap config` | Show all configuration settings |
+| `surfacemap set-config <key> <value>` | Change any config setting |
+| `surfacemap set-key <name> <value>` | Set an API key in .env |
+| `surfacemap show-keys` | Show configured API keys |
+| `surfacemap version` | Show version + check for updates |
+| `surfacemap update` | Auto-update from GitHub |
 
-## CLI Usage
-
-```bash
-# Full discovery with tree output
-surfacemap discover "Google" --domain google.com --tree
-
-# Export to JSON and CSV
-surfacemap discover example.com --json --csv --output ./results
-
-# Generate interactive HTML mindmap
-surfacemap discover "Acme Corp" -d acme.com --mindmap
-
-# Check version
-surfacemap version
-```
-
-### Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--domain` | `-d` | Primary domain (if target is a company name) |
-| `--output` | `-o` | Output directory for results |
-| `--tree` | `-t` | Display results as a rich tree in terminal |
-| `--mindmap` | `-m` | Generate interactive D3.js HTML mindmap |
-| `--json` | `-j` | Export results to JSON |
-| `--csv` | | Export results to CSV |
-
-## API Server
+## Scan Options
 
 ```bash
-# Start the API server
-uvicorn surfacemap.api.server:app --host 0.0.0.0 --port 8000
+surfacemap discover <target> [options]
 
-# Start a scan
-curl -X POST "http://localhost:8000/discover?target=example.com"
-
-# Get scan results
-curl "http://localhost:8000/scans/{scan_id}"
-
-# Health check
-curl "http://localhost:8000/health"
+Options:
+  -d, --domain TEXT        Primary domain (if target is a company name)
+  -o, --output TEXT        Output directory
+  -t, --tree              Display results as a tree
+  -m, --mindmap           Generate interactive HTML mindmap
+  -j, --json              Export results to JSON
+  --csv                   Export results to CSV
+  -e, --enrich            Enable enrichment modules (requires API keys)
+  --passive-only          Skip active probing
+  --no-analysis           Skip LLM analysis phase
 ```
 
-### API Endpoints
+## Export Examples
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/discover` | Start a new discovery scan |
-| `GET` | `/scans/{id}` | Get scan results by ID |
-| `GET` | `/scans` | List recent scans |
-| `GET` | `/health` | Health check |
+```bash
+# Export live hosts to a text file
+surfacemap export output/scan.json --format live -o live_hosts.txt
 
-## Discovery Modules
+# Export all subdomains
+surfacemap export output/scan.json --format subdomains -o subs.txt
 
-SurfaceMap runs discovery in 6 phases:
+# Export all domains (main + subsidiaries)
+surfacemap export output/scan.json --format domains
 
-| # | Phase | Module | Description |
-|---|-------|--------|-------------|
-| 1 | Company Intel | LLM Brain | Discover domains, subsidiaries, and related entities via LLM |
-| 1 | Company Intel | Subsidiary Discovery | Identify acquisitions, brands, and child companies |
-| 2 | DNS | DNS Records | Enumerate A, AAAA, MX, NS, TXT, CNAME, SOA records |
-| 2 | DNS | Subdomain - subfinder | Passive subdomain enumeration via subfinder |
-| 2 | DNS | Subdomain - crt.sh | Certificate transparency log mining |
-| 2 | DNS | Subdomain - Brute Force | DNS brute force with 100+ common prefixes |
-| 2 | DNS | Subdomain - LLM | AI-suggested subdomain candidates |
-| 3 | HTTP | HTTP Probe | Probe all hosts for HTTP/HTTPS services |
-| 3 | HTTP | Technology Detection | Identify web servers, frameworks, CMS from headers |
-| 3 | HTTP | Security Headers | Check for missing HSTS, CSP, X-Frame-Options, etc. |
-| 3 | HTTP | CDN Detection | Identify Cloudflare, CloudFront, Fastly, Akamai, etc. |
-| 3 | HTTP | WAF Detection | Detect web application firewalls |
-| 4 | Ports | Port Scan | nmap service version detection on discovered IPs |
-| 5 | Cloud | S3 Bucket Enum | Check for public/existing AWS S3 buckets |
-| 5 | Cloud | Azure Blob Enum | Check for Azure Blob Storage containers |
-| 5 | Cloud | GCS Bucket Enum | Check for Google Cloud Storage buckets |
-| 5 | Takeover | Subdomain Takeover | Detect dangling CNAMEs across 17 providers |
-| 6 | Dorks | Google Dorks | LLM-generated targeted search queries |
+# Export full CSV
+surfacemap export output/scan.json --format csv -o assets.csv
+```
 
-### Asset Types
+## API Keys
 
-| Type | Description |
-|------|-------------|
-| `domain` | Root domains |
-| `subdomain` | Discovered subdomains |
-| `ip` | IP addresses |
-| `port` | Open ports |
-| `service` | Running services with version info |
-| `cloud_bucket` | S3, Azure Blob, GCS buckets |
-| `email_server` | MX record mail servers |
-| `nameserver` | NS record nameservers |
-| `cdn` | Content delivery networks |
-| `waf` | Web application firewalls |
-| `certificate` | TLS/SSL certificates |
-| `github_repo` | GitHub repositories |
-| `social_media` | Social media profiles |
-| `url` | Discovered URLs |
-| `technology` | Detected technologies |
-| `subsidiary` | Subsidiaries and acquisitions |
+All core features work without API keys. Optional keys unlock additional data sources:
 
-## Configuration
+| Key | Purpose | Free Tier |
+|-----|---------|-----------|
+| `GEMINI_API_KEY` | LLM intelligence (brainstorm, analysis, dorks) | Free |
+| `VIRUSTOTAL_API_KEY` | Subdomain + IP enrichment | 4 req/min |
+| `SHODAN_API_KEY` | Host enrichment, banners, vulns | Free tier |
+| `GITHUB_TOKEN` | GitHub secret/code search | 30 req/min |
+| `HUNTER_API_KEY` | Email harvesting | 25/month |
+| `SECURITYTRAILS_API_KEY` | Subdomain history | 50/month |
 
-All settings are configured via environment variables:
+```bash
+# Set keys via CLI (persists to .env)
+surfacemap set-key GEMINI_API_KEY your-key
+surfacemap set-key SHODAN_API_KEY your-key
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GEMINI_API_KEY` | | Google Gemini API key |
-| `ANTHROPIC_API_KEY` | | Anthropic Claude API key |
-| `SURFACEMAP_LLM_PROVIDER` | `gemini` | LLM provider (`gemini` or `anthropic`) |
-| `SURFACEMAP_LLM_MODEL` | `gemini-2.5-flash` | LLM model name |
-| `SURFACEMAP_HTTP_TIMEOUT` | `15` | HTTP probe timeout (seconds) |
-| `SURFACEMAP_DNS_TIMEOUT` | `10` | DNS lookup timeout (seconds) |
-| `SURFACEMAP_SCAN_TIMEOUT` | `300` | nmap scan timeout (seconds) |
-| `SURFACEMAP_OUTPUT_DIR` | `./output` | Default output directory |
-| `SURFACEMAP_DB_PATH` | `./surfacemap.db` | SQLite database path |
-| `SURFACEMAP_SLACK_WEBHOOK` | | Slack webhook URL for notifications |
-| `SURFACEMAP_SLACK_TOKEN` | | Slack Bot Token for notifications |
-| `SURFACEMAP_SLACK_CHANNEL` | `#security` | Slack channel for notifications |
-| `SURFACEMAP_MAX_SUBDOMAINS` | `500` | Maximum subdomains to enumerate |
-| `SURFACEMAP_MAX_PROBES` | `20` | Concurrent HTTP probes |
-| `SURFACEMAP_MAX_DNS` | `50` | Concurrent DNS lookups |
-| `SURFACEMAP_NMAP_ARGS` | `-sV -T4 --top-ports 100` | nmap arguments |
+# Or add to .env file
+cp .env.example .env
+# Edit .env with your keys
+```
+
+## Discovery Modules (35+)
+
+### Phase 0: LLM Brainstorm
+| Module | Description |
+|--------|-------------|
+| Web Search | DuckDuckGo search for current company intel |
+| Domain Discovery | LLM identifies all related domains |
+| Subsidiary Discovery | Acquisitions, brands, joint ventures |
+| Infrastructure Intel | Tech stack, cloud providers, services |
+
+### Phase 1: Passive Recon (concurrent)
+| Module | Source | Key Required |
+|--------|--------|-------------|
+| DNS Records | dig (A/AAAA/MX/NS/TXT/CNAME/SOA) | No |
+| Subdomain Discovery | subfinder + crt.sh + brute force + LLM | No |
+| AnubisDB | jldc.me (massive subdomain DB) | No |
+| SubdomainCenter | subdomain.center | No |
+| CertSpotter | Certificate transparency API | No |
+| CertTransparency | crt.sh | No |
+| HackerTarget | Host search + reverse IP | No |
+| RapidDNS | Subdomain enumeration | No |
+| URLScan | urlscan.io search | No |
+| CommonCrawl | Web crawl URL index | No |
+| Wayback Machine | Historical URLs (streaming) | No |
+| AlienVault URLs | OTX URL history | No |
+| WHOIS/RDAP | Domain registration info | No |
+| DNS Zone Transfer | AXFR attempt | No |
+| Email Security | SPF/DKIM/DMARC analysis | No |
+| Subdomain Permutation | altdns-style generation | No |
+| ASN Discovery | Team Cymru IP-to-ASN | No |
+| VirusTotal | Subdomain + IP enrichment | Optional |
+| GitHub Dorking | Secret/code search | Optional |
+| Email Harvest | Hunter.io + regex fallback | Optional |
+
+### Phase 2: Active Probing (concurrent)
+| Module | Description | Key Required |
+|--------|-------------|-------------|
+| HTTP Probe | Technology/CDN/WAF detection, security headers | No |
+| Port Scan | nmap service detection | No |
+| SSL/TLS Analysis | Cert details, cipher suites, TLS version | No |
+| Sensitive Paths | 60+ paths (.git, .env, admin, actuator, etc.) | No |
+| JS Analysis | API endpoints, secrets, subdomains from JS | No |
+| CORS Check | Origin reflection, wildcard, credentials | No |
+| Cookie Security | Secure/HttpOnly/SameSite flags | No |
+| Cloud Storage | S3/Azure/GCS bucket enumeration | No |
+| Subdomain Takeover | 34 providers + NXDOMAIN + NS delegation | No |
+| Reverse DNS | PTR lookups | No |
+| Reverse IP | Find domains sharing IPs | No |
+| Shodan InternetDB | Ports, vulns, hostnames (free, no key) | No |
+| IPInfo | IP geolocation, ASN, org | No |
+| Shodan (full) | Banner data, CVEs | Optional |
+
+### Phase 3: LLM Analysis
+| Module | Description |
+|--------|-------------|
+| False Positive Filter | LLM reviews findings to reduce noise |
+| Risk Scorer | Algorithmic + LLM-refined scoring (A-F grade) |
+| Attack Path Analysis | Chains findings into attack narratives |
+| Executive Summary | Non-technical summary with recommendations |
+| Google Dorks | Targeted search queries |
 
 ## Output Formats
 
-- **Terminal Tree** — Rich tree display with color-coded statuses
-- **JSON** — Full scan data with metadata
-- **CSV** — Flat export for spreadsheet analysis
-- **HTML Mindmap** — Interactive D3.js force-directed graph with dark theme, zoom, drag, and tooltips
-- **Mermaid** — Mermaid.js mindmap diagram for embedding in docs
+- **Interactive HTML Mindmap** - D3.js tree with collapsible nodes, dark theme, BreachLine Labs branding
+- **Dashboard View** - Filterable asset table with search, sort, export (TXT/CSV/JSON)
+- **JSON** - Full structured scan results
+- **CSV** - Spreadsheet-compatible export
+- **CLI Tree** - Rich terminal tree display
+
+## Configuration
+
+```bash
+# View all settings
+surfacemap config
+
+# Change settings
+surfacemap set-config SURFACEMAP_LLM_MODEL gemini-2.0-flash
+surfacemap set-config SURFACEMAP_LLM_MAX_TOKENS 32768
+surfacemap set-config SURFACEMAP_MAX_CONCURRENT_DNS 500
+surfacemap set-config SURFACEMAP_HTTP_TIMEOUT 30
+```
+
+All settings are configurable via environment variables or `.env` file. See `surfacemap config` for the full list.
+
+## REST API
+
+```bash
+# Start the API server
+pip install surfacemap[api]
+uvicorn surfacemap.api.server:app --host 0.0.0.0 --port 8000
+
+# Endpoints
+POST /discover          # Start a scan
+GET  /scans/{scan_id}   # Get scan results
+GET  /scans             # List recent scans
+GET  /health            # Health check
+```
 
 ## Architecture
 
 ```
-surfacemap/
-  core/
-    config.py      — Environment-based configuration
-    models.py      — Asset, ScanResult, enums
-    llm.py         — LLM integration (Gemini/Claude)
-  discovery/
-    base.py        — DiscoveryModule ABC
-    dns.py         — DNS, subdomain, takeover, cloud modules
-    http.py        — HTTP probe, port scan modules
-    engine.py      — 6-phase orchestration engine
-  cli/
-    main.py        — Typer CLI application
-  output/
-    mindmap.py     — D3.js HTML and Mermaid export
-  api/
-    server.py      — FastAPI REST API
-  notifications/
-    slack.py       — Slack Block Kit notifications
-  storage/
-    db.py          — SQLite persistence with aiosqlite
+Phase 0: LLM Brainstorm (web search + deep thinking)
+    |
+    v
+Phase 1: Passive Recon (20+ modules concurrent)
+    |-- DNS + Subdomain Discovery
+    |-- Certificate Transparency
+    |-- OSINT APIs (AnubisDB, CertSpotter, RapidDNS, etc.)
+    |-- WHOIS, ASN, Zone Transfer, Email Security
+    |-- Subsidiary deep recon (DNS + subs + CT per subsidiary)
+    |-- Subdomain Permutation + ASN Discovery
+    |
+    v
+Phase 2: Active Probing (14 modules concurrent)
+    |-- HTTP Probe (shared client, connection pooling)
+    |-- Port Scan (nmap)
+    |-- SSL/TLS, Sensitive Paths, JS Analysis
+    |-- CORS, Cookies, Cloud, Takeover (34 providers)
+    |-- Reverse DNS/IP, Shodan InternetDB, IPInfo
+    |
+    v
+Phase 3: LLM Analysis (sequential)
+    |-- False Positive Filter
+    |-- Risk Scoring (A-F grade)
+    |-- Attack Path Analysis
+    |-- Executive Summary
+    |-- Google Dorks
 ```
 
 ## License
 
-MIT License. Copyright (c) 2026 Yash Korat.
+MIT License - see [LICENSE](LICENSE) for details.
 
----
+## Author
 
-Built by [BreachLine Labs](https://breachline.io)
+**BreachLine Labs** - [breachline.io](https://breachline.io) - hello@breachline.io
+

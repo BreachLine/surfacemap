@@ -16,10 +16,12 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
 from surfacemap import __version__
+from surfacemap.core.config import get_config
 from surfacemap.core.models import AssetType, ScanResult
 
 app = typer.Typer(
@@ -34,8 +36,18 @@ console = Console()
 
 def _build_tree(result: ScanResult) -> Tree:
     """Build a rich Tree visualization of the scan results."""
+    config = get_config()
+
+    grade_color = {
+        "A": "green", "B": "cyan", "C": "yellow", "D": "red", "F": "bold red",
+    }
+    grade_str = ""
+    if result.risk_grade:
+        gc = grade_color.get(result.risk_grade, "white")
+        grade_str = f" [{gc}]Risk: {result.risk_grade} ({result.risk_score}/100)[/{gc}]"
+
     tree = Tree(
-        f"[bold cyan]{result.target}[/] [dim]({result.scan_id})[/]"
+        f"[bold cyan]{result.target}[/] [dim]({result.scan_id})[/]{grade_str}"
     )
 
     # Group assets by type
@@ -46,62 +58,40 @@ def _build_tree(result: ScanResult) -> Tree:
             type_groups[type_name] = []
         type_groups[type_name].append(asset.to_dict())
 
-    # Add each type as a branch
-    type_icons = {
-        "domain": "globe",
-        "subdomain": "link",
-        "ip": "desktop_computer",
-        "port": "electric_plug",
-        "service": "gear",
-        "cloud_bucket": "cloud",
-        "email_server": "envelope",
-        "nameserver": "satellite",
-        "cdn": "rocket",
-        "waf": "shield",
-        "certificate": "lock",
-        "github_repo": "file_folder",
-        "social_media": "bust_in_silhouette",
-        "url": "globe_with_meridians",
-        "technology": "wrench",
-        "subsidiary": "office_building",
+    display_limit = config.cli_asset_display_limit
+
+    status_colors = {
+        "live": "green", "down": "red", "redirect": "yellow",
+        "filtered": "magenta", "unknown": "dim",
+        "takeover_possible": "bold red", "vulnerable": "bold red",
+        "misconfigured": "red",
+    }
+    sev_colors = {
+        "critical": "bold red", "high": "red", "medium": "yellow", "low": "blue",
     }
 
-    for type_name, assets in sorted(type_groups.items()):
-        icon = type_icons.get(type_name, "")
+    for type_name, assets in sorted(type_groups.items(), key=lambda x: -len(x[1])):
         branch = tree.add(
             f"[bold yellow]{type_name}[/] [dim]({len(assets)})[/]"
         )
-        for asset in assets[:50]:  # Limit display
-            status_color = {
-                "live": "green",
-                "down": "red",
-                "redirect": "yellow",
-                "filtered": "magenta",
-                "unknown": "dim",
-                "takeover_possible": "bold red",
-            }.get(asset["status"], "dim")
-
+        for asset in assets[:display_limit]:
+            sc = status_colors.get(asset["status"], "dim")
             severity_badge = ""
             if asset["severity"] not in ("info", "unknown"):
-                sev_color = {
-                    "critical": "bold red",
-                    "high": "red",
-                    "medium": "yellow",
-                    "low": "blue",
-                }.get(asset["severity"], "dim")
-                severity_badge = f" [{sev_color}][{asset['severity'].upper()}][/{sev_color}]"
+                svc = sev_colors.get(asset["severity"], "dim")
+                severity_badge = f" [{svc}][{asset['severity'].upper()}][/{svc}]"
 
             label = (
-                f"[{status_color}]{asset['value']}[/{status_color}]"
-                f" [{status_color}]({asset['status']})[/{status_color}]"
+                f"[{sc}]{asset['value']}[/{sc}]"
+                f" [{sc}]({asset['status']})[/{sc}]"
                 f"{severity_badge}"
             )
             if asset.get("source"):
                 label += f" [dim]via {asset['source']}[/]"
             branch.add(label)
 
-        if len(assets) > 50:
-            branch.add(f"[dim]... and {len(assets) - 50} more[/]")
+        if len(assets) > display_limit:
+            branch.add(f"[dim]... and {len(assets) - display_limit} more[/]")
 
     return tree
 
@@ -123,6 +113,16 @@ def _print_stats(result: ScanResult) -> None:
     summary.add_row("Scan ID", result.scan_id)
     summary.add_row("Started", result.started_at or "N/A")
     summary.add_row("Completed", result.completed_at or "N/A")
+
+    if result.risk_score is not None:
+        grade_color = {
+            "A": "green", "B": "cyan", "C": "yellow", "D": "red", "F": "bold red",
+        }
+        gc = grade_color.get(result.risk_grade or "", "white")
+        summary.add_row(
+            "Risk Score",
+            f"[{gc}]{result.risk_score}/100 (Grade: {result.risk_grade})[/{gc}]",
+        )
     console.print(summary)
 
     # By type table
@@ -167,6 +167,27 @@ def _print_stats(result: ScanResult) -> None:
         console.print(
             f"[bold]Technologies:[/] {', '.join(stats['unique_technologies'])}"
         )
+
+    # Executive Summary
+    if result.executive_summary:
+        console.print()
+        console.print(Panel(
+            result.executive_summary,
+            title="[bold cyan]Executive Summary[/]",
+            border_style="cyan",
+        ))
+
+    # Attack Paths
+    if result.attack_paths:
+        console.print()
+        console.print("[bold red]Attack Paths Identified:[/]")
+        for i, path in enumerate(result.attack_paths, 1):
+            name = path.get("name", f"Path {i}")
+            sev = path.get("severity", "unknown")
+            steps = path.get("steps", [])
+            console.print(f"\n  [bold]{i}. {name}[/] [dim]({sev})[/]")
+            for j, step in enumerate(steps, 1):
+                console.print(f"     {j}. {step}")
 
 
 def _export_json(result: ScanResult, output_path: Path) -> Path:
@@ -230,20 +251,40 @@ def discover(
         False, "--csv",
         help="Export results to CSV",
     ),
+    enrich: bool = typer.Option(
+        False, "--enrich", "-e",
+        help="Enable enrichment modules (VirusTotal, Shodan, GitHub — requires API keys)",
+    ),
+    passive_only: bool = typer.Option(
+        False, "--passive-only",
+        help="Skip active probing (passive recon only)",
+    ),
+    no_analysis: bool = typer.Option(
+        False, "--no-analysis",
+        help="Skip LLM analysis phase (risk scoring, attack paths, summary)",
+    ),
 ) -> None:
     """Discover the attack surface of a company or domain.
 
     Examples:
         surfacemap discover "Google" --domain google.com
         surfacemap discover example.com --tree --json
-        surfacemap discover "Acme Corp" -d acme.com --mindmap
+        surfacemap discover "Acme Corp" -d acme.com --mindmap --enrich
     """
     from surfacemap.discovery.engine import DiscoveryEngine
+
+    config = get_config()
 
     # If target looks like a domain, use it as both
     effective_domain = domain or target
 
-    engine = DiscoveryEngine(target=target, domain=effective_domain)
+    engine = DiscoveryEngine(
+        target=target,
+        domain=effective_domain,
+        enrich=enrich,
+        passive_only=passive_only,
+        skip_analysis=no_analysis,
+    )
 
     try:
         result = asyncio.run(engine.run())
@@ -260,7 +301,7 @@ def discover(
         console.print(_build_tree(result))
 
     # Determine output directory
-    output_dir = Path(output) if output else Path("./output")
+    output_dir = Path(output) if output else config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # JSON export
@@ -279,10 +320,14 @@ def discover(
     if mindmap:
         try:
             from surfacemap.output.mindmap import generate_html_mindmap
+            import webbrowser
 
             mindmap_path = output_dir / f"{result.scan_id}_mindmap.html"
             generate_html_mindmap(result, mindmap_path)
             console.print(f"\n[green]Mindmap saved to:[/] {mindmap_path}")
+            # Auto-open in browser
+            webbrowser.open(str(mindmap_path.resolve()))
+            console.print("[dim]Opened mindmap in browser[/]")
         except Exception as e:
             console.print(f"\n[red]Mindmap generation failed:[/] {e}")
 
@@ -291,8 +336,351 @@ def discover(
 
 @app.command()
 def version() -> None:
-    """Show the current SurfaceMap version."""
-    console.print(f"[bold cyan]SurfaceMap[/] v{__version__}")
+    """Show version info and check for updates."""
+    console.print()
+    console.print("[bold cyan]SurfaceMap[/] [dim]by[/] [bold]BreachLine Labs[/]")
+    console.print(f"  Version:    v{__version__}")
+    console.print(f"  Developer:  BreachLine Labs")
+    console.print(f"  Repository: github.com/BreachLine/surfacemap")
+    console.print(f"  License:    MIT")
+    console.print()
+
+    # Check for updates from GitHub
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://api.github.com/repos/BreachLine/surfacemap/releases/latest",
+            timeout=5,
+            follow_redirects=True,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            latest = data.get("tag_name", "").lstrip("v")
+            if latest and latest != __version__:
+                console.print(f"  [yellow]Update available: v{latest}[/]")
+                console.print(f"  Run: [bold]surfacemap update[/]")
+            else:
+                console.print("  [green]Up to date[/]")
+        else:
+            console.print("  [dim]Could not check for updates[/]")
+    except Exception:
+        console.print("  [dim]Could not check for updates (offline)[/]")
+    console.print()
+
+
+@app.command()
+def update() -> None:
+    """Update SurfaceMap to the latest version from GitHub."""
+    import subprocess
+    import sys
+
+    console.print("[bold cyan]Checking for updates...[/]")
+
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://api.github.com/repos/BreachLine/surfacemap/releases/latest",
+            timeout=10,
+            follow_redirects=True,
+        )
+        if resp.status_code == 200:
+            latest = resp.json().get("tag_name", "").lstrip("v")
+            if latest and latest != __version__:
+                console.print(f"  Current: v{__version__} -> Latest: v{latest}")
+                console.print("[bold]Updating...[/]")
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--upgrade",
+                     "git+https://github.com/BreachLine/surfacemap.git"],
+                    capture_output=True, text=True,
+                )
+                if result.returncode == 0:
+                    console.print("[green]Updated successfully![/]")
+                else:
+                    console.print(f"[red]Update failed:[/] {result.stderr[:200]}")
+            else:
+                console.print(f"[green]Already on latest version (v{__version__})[/]")
+        else:
+            console.print("[red]Could not check for updates[/]")
+    except Exception as e:
+        console.print(f"[red]Update failed:[/] {e}")
+
+
+@app.command(name="set-key")
+def set_key(
+    name: str = typer.Argument(help="API key name (e.g. GEMINI_API_KEY, SHODAN_API_KEY)"),
+    value: str = typer.Argument(help="API key value"),
+) -> None:
+    """Set an API key in the .env file.
+
+    Examples:
+        surfacemap set-key GEMINI_API_KEY sk-abc123
+        surfacemap set-key SHODAN_API_KEY xyz789
+        surfacemap set-key VIRUSTOTAL_API_KEY abc
+        surfacemap set-key GITHUB_TOKEN ghp_xxx
+        surfacemap set-key HUNTER_API_KEY xxx
+        surfacemap set-key SECURITYTRAILS_API_KEY xxx
+    """
+    env_path = Path(".env")
+    lines: list[str] = []
+    found = False
+
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                if line.strip().startswith(f"{name}="):
+                    lines.append(f"{name}={value}\n")
+                    found = True
+                else:
+                    lines.append(line)
+
+    if not found:
+        lines.append(f"{name}={value}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+    console.print(f"[green]Set {name}[/] in .env")
+
+
+@app.command(name="show-keys")
+def show_keys() -> None:
+    """Show configured API keys and their status.
+
+    Example:
+        surfacemap show-keys
+    """
+    config = get_config()
+
+    keys = [
+        ("GEMINI_API_KEY", config.gemini_api_key, "LLM (Gemini)"),
+        ("ANTHROPIC_API_KEY", config.anthropic_api_key, "LLM (Anthropic)"),
+        ("OPENAI_API_KEY", config.openai_api_key, "LLM (OpenAI)"),
+        ("VIRUSTOTAL_API_KEY", config.virustotal_api_key, "VirusTotal enrichment"),
+        ("SHODAN_API_KEY", config.shodan_api_key, "Shodan enrichment"),
+        ("GITHUB_TOKEN", config.github_token, "GitHub dorking"),
+        ("HUNTER_API_KEY", config.hunter_api_key, "Hunter.io email harvest"),
+        ("SECURITYTRAILS_API_KEY", "", "SecurityTrails subdomains"),
+    ]
+
+    import os
+    # Check SecurityTrails from env since it's not in config
+    st_key = os.environ.get("SECURITYTRAILS_API_KEY", "")
+
+    table = Table(title="API Keys")
+    table.add_column("Key", style="cyan")
+    table.add_column("Status", justify="center")
+    table.add_column("Purpose", style="dim")
+
+    for name, val, purpose in keys:
+        if name == "SECURITYTRAILS_API_KEY":
+            val = st_key
+        if val:
+            masked = val[:4] + "..." + val[-4:] if len(val) > 8 else "***"
+            status = f"[green]{masked}[/]"
+        else:
+            status = "[red]not set[/]"
+        table.add_row(name, status, purpose)
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Set keys with:[/] surfacemap set-key KEY_NAME value")
+    console.print("[dim]Or add to .env file / export in shell[/]")
+
+
+@app.command(name="config")
+def show_config() -> None:
+    """Show all LLM and scan configuration settings.
+
+    Example:
+        surfacemap config
+    """
+    config = get_config()
+
+    console.print()
+    console.print("[bold cyan]LLM Configuration[/]")
+    llm_table = Table(show_header=True, box=None, padding=(0, 2))
+    llm_table.add_column("Setting", style="cyan")
+    llm_table.add_column("Value")
+    llm_table.add_column("Env Var", style="dim")
+
+    llm_settings = [
+        ("Provider", config.llm_provider, "SURFACEMAP_LLM_PROVIDER"),
+        ("Primary Model", config.llm_model, "SURFACEMAP_LLM_MODEL"),
+        ("Fallback Model", config.gemini_fallback_model, "SURFACEMAP_GEMINI_FALLBACK_MODEL"),
+        ("Anthropic Model", config.anthropic_model, "SURFACEMAP_ANTHROPIC_MODEL"),
+        ("OpenAI Model", config.openai_model, "SURFACEMAP_OPENAI_MODEL"),
+        ("Max Tokens", str(config.llm_max_tokens), "SURFACEMAP_LLM_MAX_TOKENS"),
+        ("Temperature", str(config.llm_temperature), "SURFACEMAP_LLM_TEMPERATURE"),
+        ("Timeout", f"{config.llm_timeout}s", "SURFACEMAP_LLM_TIMEOUT"),
+        ("Max Retries", str(config.llm_max_retries), "SURFACEMAP_LLM_MAX_RETRIES"),
+        ("Retry Delay", f"{config.llm_retry_delay}s", "SURFACEMAP_LLM_RETRY_DELAY"),
+    ]
+    for name, val, env in llm_settings:
+        llm_table.add_row(name, f"[bold]{val}[/]", env)
+    console.print(llm_table)
+
+    console.print()
+    console.print("[bold cyan]Timeouts[/]")
+    timeout_table = Table(show_header=True, box=None, padding=(0, 2))
+    timeout_table.add_column("Setting", style="cyan")
+    timeout_table.add_column("Value")
+    timeout_table.add_column("Env Var", style="dim")
+
+    timeout_settings = [
+        ("HTTP Probe", f"{config.http_timeout}s", "SURFACEMAP_HTTP_TIMEOUT"),
+        ("OSINT APIs", f"{config.osint_timeout}s", "SURFACEMAP_OSINT_TIMEOUT"),
+        ("OSINT Connect", f"{config.osint_connect_timeout}s", "SURFACEMAP_OSINT_CONNECT_TIMEOUT"),
+        ("DNS", f"{config.dns_timeout}s", "SURFACEMAP_DNS_TIMEOUT"),
+        ("SSL/TLS", f"{config.ssl_timeout}s", "SURFACEMAP_SSL_TIMEOUT"),
+        ("Subfinder", f"{config.subfinder_timeout}s", "SURFACEMAP_SUBFINDER_TIMEOUT"),
+        ("Nmap Scan", f"{config.scan_timeout}s", "SURFACEMAP_SCAN_TIMEOUT"),
+    ]
+    for name, val, env in timeout_settings:
+        timeout_table.add_row(name, f"[bold]{val}[/]", env)
+    console.print(timeout_table)
+
+    console.print()
+    console.print("[bold cyan]Concurrency[/]")
+    conc_table = Table(show_header=True, box=None, padding=(0, 2))
+    conc_table.add_column("Setting", style="cyan")
+    conc_table.add_column("Value")
+    conc_table.add_column("Env Var", style="dim")
+
+    conc_settings = [
+        ("HTTP Probes", str(config.max_concurrent_probes), "SURFACEMAP_MAX_PROBES"),
+        ("DNS Lookups", str(config.max_concurrent_dns), "SURFACEMAP_MAX_DNS"),
+        ("SSL Checks", str(config.max_concurrent_ssl), "SURFACEMAP_MAX_SSL"),
+        ("Path Probes", str(config.max_concurrent_paths), "SURFACEMAP_MAX_PATHS"),
+        ("JS Analysis", str(config.max_concurrent_js), "SURFACEMAP_MAX_JS"),
+    ]
+    for name, val, env in conc_settings:
+        conc_table.add_row(name, f"[bold]{val}[/]", env)
+    console.print(conc_table)
+
+    console.print()
+    console.print("[bold cyan]Discovery Limits[/]")
+    limit_table = Table(show_header=True, box=None, padding=(0, 2))
+    limit_table.add_column("Setting", style="cyan")
+    limit_table.add_column("Value")
+    limit_table.add_column("Env Var", style="dim")
+
+    limit_settings = [
+        ("Max Subdomains", str(config.max_subdomains), "SURFACEMAP_MAX_SUBDOMAINS"),
+        ("Max Extra Domains", str(config.max_extra_domains), "SURFACEMAP_MAX_EXTRA_DOMAINS"),
+        ("Max Permutations", str(config.max_permutations), "SURFACEMAP_MAX_PERMUTATIONS"),
+        ("Max IPs to Scan", str(config.max_ips_to_scan), "SURFACEMAP_MAX_IPS_TO_SCAN"),
+        ("Nmap Args", config.nmap_args, "SURFACEMAP_NMAP_ARGS"),
+        ("Output Dir", str(config.output_dir), "SURFACEMAP_OUTPUT_DIR"),
+    ]
+    for name, val, env in limit_settings:
+        limit_table.add_row(name, f"[bold]{val}[/]", env)
+    console.print(limit_table)
+
+    console.print()
+    console.print("[dim]Override any setting via environment variable or .env file[/]")
+    console.print("[dim]Example: surfacemap set-key SURFACEMAP_LLM_MAX_TOKENS 32768[/]")
+    console.print()
+
+
+@app.command(name="set-config")
+def set_config_value(
+    name: str = typer.Argument(help="Config name (e.g. SURFACEMAP_LLM_MAX_TOKENS)"),
+    value: str = typer.Argument(help="Value to set"),
+) -> None:
+    """Set a configuration value in the .env file.
+
+    Examples:
+        surfacemap set-config SURFACEMAP_LLM_MODEL gemini-2.0-flash
+        surfacemap set-config SURFACEMAP_LLM_MAX_TOKENS 32768
+        surfacemap set-config SURFACEMAP_MAX_CONCURRENT_DNS 500
+        surfacemap set-config SURFACEMAP_HTTP_TIMEOUT 30
+    """
+    env_path = Path(".env")
+    lines: list[str] = []
+    found = False
+
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                if line.strip().startswith(f"{name}="):
+                    lines.append(f"{name}={value}\n")
+                    found = True
+                else:
+                    lines.append(line)
+
+    if not found:
+        lines.append(f"{name}={value}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+    console.print(f"[green]Set {name}={value}[/] in .env")
+    console.print("[dim]Restart surfacemap for changes to take effect[/]")
+
+
+@app.command(name="export")
+def export_assets(
+    scan_file: str = typer.Argument(help="Path to scan JSON file (e.g. output/abc123.json)"),
+    format: str = typer.Option("txt", "--format", "-f", help="Export format: txt, csv, json, domains, live, subdomains"),
+    output: str = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
+) -> None:
+    """Export assets from a completed scan in various formats.
+
+    Examples:
+        surfacemap export output/abc123.json --format domains
+        surfacemap export output/abc123.json --format live -o live_hosts.txt
+        surfacemap export output/abc123.json --format subdomains
+        surfacemap export output/abc123.json --format csv -o assets.csv
+    """
+    import json as _json
+
+    try:
+        with open(scan_file) as f:
+            data = _json.load(f)
+    except Exception as e:
+        console.print(f"[red]Error loading {scan_file}:[/] {e}")
+        raise typer.Exit(1)
+
+    assets = data.get("assets", [])
+
+    if format == "domains":
+        lines = sorted({a["value"] for a in assets if a["type"] in ("domain", "subdomain")})
+    elif format == "live":
+        hosts: set[str] = set()
+        for a in assets:
+            if a["type"] == "url" and a["status"] in ("live", "redirect"):
+                host = a["value"].split("://", 1)[-1].split("/", 1)[0]
+                hosts.add(host)
+            elif a["status"] == "live" and a["type"] in ("domain", "subdomain"):
+                hosts.add(a["value"])
+        lines = sorted(hosts)
+    elif format == "subdomains":
+        lines = sorted({a["value"] for a in assets if a["type"] == "subdomain"})
+    elif format == "txt":
+        lines = [a["value"] for a in assets]
+    elif format == "csv":
+        header = "value,type,status,severity,source"
+        rows = [f'"{a["value"]}","{a["type"]}","{a["status"]}","{a["severity"]}","{a["source"]}"' for a in assets]
+        lines = [header] + rows
+    elif format == "json":
+        content = _json.dumps(assets, indent=2)
+        if output:
+            Path(output).write_text(content)
+            console.print(f"[green]Exported {len(assets)} assets to {output}[/]")
+        else:
+            print(content)
+        return
+    else:
+        console.print(f"[red]Unknown format:[/] {format}")
+        console.print("[dim]Available: txt, csv, json, domains, live, subdomains[/]")
+        raise typer.Exit(1)
+
+    content = "\n".join(lines)
+    if output:
+        Path(output).write_text(content)
+        console.print(f"[green]Exported {len(lines)} items to {output}[/]")
+    else:
+        print(content)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """HTTP-based discovery modules.
 
-Probes discovered subdomains via HTTP/HTTPS and runs port scans
-on discovered IP addresses using nmap.
+Probes discovered subdomains via HTTP/HTTPS to detect technologies,
+CDNs, WAFs, and missing security headers.
 """
 
 from __future__ import annotations
@@ -106,20 +106,36 @@ class HTTPProbeModule(DiscoveryModule):
         config = get_config()
         subdomains = result.get_by_type(AssetType.SUBDOMAIN)
 
-        # Also probe the main domain
+        # Probe ALL discovered hosts with a shared client for connection pooling
         all_targets = [target] + [a.value for a in subdomains]
         seen: set[str] = set()
-
-        sem = asyncio.Semaphore(config.max_concurrent_probes)
-        tasks = []
+        hosts_to_probe: list[str] = []
 
         for host in all_targets:
             if host in seen:
                 continue
             seen.add(host)
-            tasks.append(self._probe_host(host, target, result, sem, config))
+            hosts_to_probe.append(host)
 
-        await asyncio.gather(*tasks)
+        logger.info("[HTTP Probe] Probing %d hosts with %d concurrency",
+                    len(hosts_to_probe), config.max_concurrent_probes)
+
+        sem = asyncio.Semaphore(config.max_concurrent_probes)
+        # Use short connect timeout (5s) — if host doesn't respond quickly, skip
+        probe_timeout = httpx.Timeout(connect=5, read=config.http_timeout, write=10, pool=10)
+
+        async with httpx.AsyncClient(
+            timeout=probe_timeout,
+            follow_redirects=True,
+            verify=False,
+            headers={"User-Agent": config.user_agent},
+            limits=httpx.Limits(max_connections=config.max_concurrent_probes),
+        ) as shared_client:
+            tasks = [
+                self._probe_host(host, target, result, sem, config, shared_client)
+                for host in hosts_to_probe
+            ]
+            await asyncio.gather(*tasks)
 
     async def _probe_host(
         self,
@@ -128,6 +144,7 @@ class HTTPProbeModule(DiscoveryModule):
         result: ScanResult,
         sem: asyncio.Semaphore,
         config: object,
+        client: httpx.AsyncClient,
     ) -> None:
         """Probe a single host via HTTPS then HTTP."""
         cfg = config  # type: ignore[assignment]
@@ -135,13 +152,7 @@ class HTTPProbeModule(DiscoveryModule):
             for scheme in ["https", "http"]:
                 url = f"{scheme}://{host}"
                 try:
-                    async with httpx.AsyncClient(
-                        timeout=cfg.http_timeout,
-                        follow_redirects=True,
-                        verify=False,
-                        headers={"User-Agent": cfg.user_agent},
-                    ) as client:
-                        resp = await client.get(url)
+                    resp = await client.get(url)
 
                     # Determine status
                     if 300 <= resp.status_code < 400:
@@ -284,10 +295,13 @@ class PortScanModule(DiscoveryModule):
 
         config = get_config()
 
-        # Deduplicate IPs
-        unique_ips = list({a.value for a in ip_assets})
+        # Deduplicate IPs and sanitize
+        unique_ips = list({
+            re.sub(r'[^a-fA-F0-9.:]', '', a.value)
+            for a in ip_assets
+        })
 
-        for ip in unique_ips[:10]:  # Limit to prevent excessive scanning
+        for ip in unique_ips[: config.max_ips_to_scan]:
             await self._scan_ip(ip, target, result, config)
 
     async def _scan_ip(

@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from surfacemap import __version__
 from surfacemap.core.config import get_config
 from surfacemap.core.models import ScanResult
 
@@ -58,11 +59,12 @@ async def _send_via_webhook(
     blocks: list[dict[str, Any]] | None,
 ) -> bool:
     """Send via Slack incoming webhook."""
+    config = get_config()
     payload: dict[str, Any] = {"text": message}
     if blocks:
         payload["blocks"] = blocks
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=config.slack_timeout) as client:
         resp = await client.post(webhook_url, json=payload)
         if resp.status_code == 200:
             logger.info("Slack webhook notification sent")
@@ -81,6 +83,7 @@ async def _send_via_bot(
     blocks: list[dict[str, Any]] | None,
 ) -> bool:
     """Send via Slack Bot Token (chat.postMessage)."""
+    config = get_config()
     payload: dict[str, Any] = {
         "channel": channel,
         "text": message,
@@ -88,7 +91,7 @@ async def _send_via_bot(
     if blocks:
         payload["blocks"] = blocks
 
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=config.slack_timeout) as client:
         resp = await client.post(
             "https://slack.com/api/chat.postMessage",
             json=payload,
@@ -217,7 +220,7 @@ async def notify_scan_complete(result: ScanResult) -> bool:
         "elements": [
             {
                 "type": "mrkdwn",
-                "text": f"SurfaceMap v1.0.0 | Started: {result.started_at} | Completed: {result.completed_at or 'N/A'}",
+                "text": f"SurfaceMap v{__version__} | Started: {result.started_at} | Completed: {result.completed_at or 'N/A'}",
             },
         ],
     })

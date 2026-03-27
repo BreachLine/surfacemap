@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "surfacemap"
-version = "1.0.0"
+version = "2.0.1"
 description = "LLM-driven attack surface discovery — find every asset from just a company name"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Yash Korat" },
+    { name = "BreachLine Labs", email = "hello@breachline.io" },
 ]
 keywords = ["security", "recon", "attack-surface", "osint", "discovery"]
 classifiers = [
@@ -45,6 +45,11 @@ notifications = [
 all = [
     "surfacemap[api,llm,notifications]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/BreachLine/surfacemap"
+Repository = "https://github.com/BreachLine/surfacemap"
+Issues = "https://github.com/BreachLine/surfacemap/issues"
 
 [project.scripts]
 surfacemap = "surfacemap.cli.main:app"

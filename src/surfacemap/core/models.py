@@ -22,8 +22,11 @@ class AssetType(str, Enum):
     IP = "ip"
     PORT = "port"
     SERVICE = "service"
+    ASN = "asn"
+    IP_RANGE = "ip_range"
     CLOUD_BUCKET = "cloud_bucket"
     EMAIL_SERVER = "email_server"
+    EMAIL = "email"
     NAMESERVER = "nameserver"
     CDN = "cdn"
     WAF = "waf"
@@ -33,6 +36,13 @@ class AssetType(str, Enum):
     URL = "url"
     TECHNOLOGY = "technology"
     SUBSIDIARY = "subsidiary"
+    WHOIS_RECORD = "whois_record"
+    SENSITIVE_FILE = "sensitive_file"
+    API_ENDPOINT = "api_endpoint"
+    SECRET_LEAK = "secret_leak"
+    CORS_MISCONFIGURATION = "cors_misconfiguration"
+    COOKIE_ISSUE = "cookie_issue"
+    DNS_ISSUE = "dns_issue"
 
 
 class AssetStatus(str, Enum):
@@ -44,6 +54,8 @@ class AssetStatus(str, Enum):
     FILTERED = "filtered"
     UNKNOWN = "unknown"
     TAKEOVER_POSSIBLE = "takeover_possible"
+    VULNERABLE = "vulnerable"
+    MISCONFIGURED = "misconfigured"
 
 
 class Severity(str, Enum):
@@ -118,6 +130,11 @@ class ScanResult:
         self.started_at = datetime.now(timezone.utc).isoformat()
         self.completed_at: str | None = None
         self._fingerprints: set[str] = set()
+        # Analysis results (populated by LLM analysis phase)
+        self.risk_score: int | None = None
+        self.risk_grade: str | None = None
+        self.executive_summary: str | None = None
+        self.attack_paths: list[dict[str, Any]] = []
 
     def add_asset(self, asset: Asset) -> bool:
         """Add an asset with deduplication. Returns True if new."""
@@ -135,6 +152,20 @@ class ScanResult:
     def get_live(self) -> list[Asset]:
         """Get all live assets."""
         return [a for a in self.assets if a.status == AssetStatus.LIVE]
+
+    def get_live_hosts(self) -> list[str]:
+        """Get unique live hostnames from URL assets and live domain/subdomain assets."""
+        hosts: set[str] = set()
+        # Collect hosts from live URLs (HTTP probe results)
+        for a in self.assets:
+            if a.type == AssetType.URL and a.status in (AssetStatus.LIVE, AssetStatus.REDIRECT):
+                host = a.value.split("://", 1)[-1].split("/", 1)[0]
+                hosts.add(host)
+            elif a.status == AssetStatus.LIVE and a.type in (
+                AssetType.DOMAIN, AssetType.SUBDOMAIN,
+            ):
+                hosts.add(a.value)
+        return sorted(hosts)
 
     def get_by_severity(self, severity: Severity) -> list[Asset]:
         """Get all assets with a given severity."""
@@ -162,6 +193,8 @@ class ScanResult:
             "by_severity": severity_counts,
             "unique_technologies": sorted(all_technologies),
             "live_assets": len(self.get_live()),
+            "risk_score": self.risk_score,
+            "risk_grade": self.risk_grade,
         }
 
     def mark_complete(self) -> None:
@@ -170,7 +203,7 @@ class ScanResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the full scan result."""
-        return {
+        data: dict[str, Any] = {
             "target": self.target,
             "scan_id": self.scan_id,
             "started_at": self.started_at,
@@ -178,3 +211,11 @@ class ScanResult:
             "stats": self.compute_stats(),
             "assets": [a.to_dict() for a in self.assets],
         }
+        if self.risk_score is not None:
+            data["risk_score"] = self.risk_score
+            data["risk_grade"] = self.risk_grade
+        if self.executive_summary:
+            data["executive_summary"] = self.executive_summary
+        if self.attack_paths:
+            data["attack_paths"] = self.attack_paths
+        return data
