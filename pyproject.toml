@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "surfacemap"
+version = "1.0.0"
+description = "LLM-driven attack surface discovery — find every asset from just a company name"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Yash Korat" },
+]
+keywords = ["security", "recon", "attack-surface", "osint", "discovery"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+dependencies = [
+    "typer[all]>=0.9.0",
+    "httpx>=0.27.0",
+    "rich>=13.7.0",
+    "aiosqlite>=0.20.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+]
+llm = [
+    "google-genai>=1.0.0",
+    "anthropic>=0.40.0",
+]
+notifications = [
+    "slack-sdk>=3.30.0",
+]
+all = [
+    "surfacemap[api,llm,notifications]",
+]
+
+[project.scripts]
+surfacemap = "surfacemap.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/surfacemap"]
