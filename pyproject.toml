@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "surfacemap"
-version = "2.0.1"
+version = "2.1.0"
 description = "LLM-driven attack surface discovery — find every asset from just a company name"
 readme = "README.md"
 license = "MIT"
