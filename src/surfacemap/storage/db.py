@@ -210,7 +210,7 @@ class ScanDatabase:
             cursor = await db.execute(
                 """
                 SELECT scan_id, target, started_at, completed_at,
-                       total_assets, live_assets
+                       total_assets, live_assets, risk_score, risk_grade
                 FROM scans
                 ORDER BY created_at DESC
                 LIMIT ?

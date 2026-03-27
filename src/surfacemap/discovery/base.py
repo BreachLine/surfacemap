@@ -24,6 +24,9 @@ _MODULE_TIMEOUT = int(os.getenv("SURFACEMAP_MODULE_TIMEOUT", "120"))
 class DiscoveryModule(ABC):
     """Abstract base class for discovery modules."""
 
+    # Override in subclass to allow more time (e.g. Nuclei scanning).
+    module_timeout: int | None = None
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -47,16 +50,18 @@ class DiscoveryModule(ABC):
         """Run discover() with error handling and a hard timeout.
 
         Returns True if the module completed successfully, False otherwise.
-        Each module gets at most _MODULE_TIMEOUT seconds before being cancelled.
+        Each module gets at most _MODULE_TIMEOUT seconds before being cancelled,
+        unless the module declares a custom module_timeout.
         """
+        timeout = self.module_timeout or _MODULE_TIMEOUT
         try:
             await asyncio.wait_for(
                 self.discover(target, result),
-                timeout=_MODULE_TIMEOUT,
+                timeout=timeout,
             )
             return True
         except asyncio.TimeoutError:
-            logger.warning("[%s] Timed out after %ds for %s", self.name, _MODULE_TIMEOUT, target)
+            logger.warning("[%s] Timed out after %ds for %s", self.name, timeout, target)
             return False
         except Exception as e:
             logger.error("[%s] Failed: %s", self.name, e)

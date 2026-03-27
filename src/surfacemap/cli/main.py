@@ -251,6 +251,10 @@ def discover(
         False, "--csv",
         help="Export results to CSV",
     ),
+    sarif: bool = typer.Option(
+        False, "--sarif",
+        help="Export results in SARIF format for CI/CD integration",
+    ),
     enrich: bool = typer.Option(
         False, "--enrich", "-e",
         help="Enable enrichment modules (VirusTotal, Shodan, GitHub — requires API keys)",
@@ -315,6 +319,16 @@ def discover(
         csv_path = output_dir / f"{result.scan_id}.csv"
         _export_csv(result, csv_path)
         console.print(f"\n[green]CSV saved to:[/] {csv_path}")
+
+    # SARIF export
+    if sarif:
+        from surfacemap.output.sarif import generate_sarif
+        sarif_data = generate_sarif(result)
+        sarif_path = output_dir / f"{result.scan_id}.sarif.json"
+        sarif_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(sarif_path, "w") as f:
+            json.dump(sarif_data, f, indent=2)
+        console.print(f"\n[green]SARIF saved to:[/] {sarif_path}")
 
     # Mindmap
     if mindmap:
@@ -459,6 +473,12 @@ def show_keys() -> None:
         ("SHODAN_API_KEY", config.shodan_api_key, "Shodan enrichment"),
         ("GITHUB_TOKEN", config.github_token, "GitHub dorking"),
         ("HUNTER_API_KEY", config.hunter_api_key, "Hunter.io email harvest"),
+        ("CENSYS_API_ID", config.censys_api_id, "Censys search"),
+        ("CENSYS_API_SECRET", config.censys_api_secret, "Censys search"),
+        ("BINARYEDGE_API_KEY", config.binaryedge_api_key, "BinaryEdge subdomains"),
+        ("FULLHUNT_API_KEY", config.fullhunt_api_key, "FullHunt subdomains"),
+        ("PASSIVETOTAL_USERNAME", config.passivetotal_username, "PassiveTotal enrichment"),
+        ("PASSIVETOTAL_API_KEY", config.passivetotal_api_key, "PassiveTotal enrichment"),
         ("SECURITYTRAILS_API_KEY", "", "SecurityTrails subdomains"),
     ]
 
@@ -681,6 +701,119 @@ def export_assets(
         console.print(f"[green]Exported {len(lines)} items to {output}[/]")
     else:
         print(content)
+
+
+@app.command()
+def monitor(
+    target: str = typer.Argument(help="Target to monitor"),
+    domain: str = typer.Option(None, "--domain", "-d", help="Primary domain"),
+    interval: str = typer.Option("24h", "--interval", "-i", help="Scan interval (e.g. 24h, 30m, 1d)"),
+    enrich: bool = typer.Option(False, "--enrich", "-e", help="Enable enrichment"),
+    passive_only: bool = typer.Option(False, "--passive-only", help="Passive only"),
+) -> None:
+    """Start continuous monitoring with diff alerts."""
+    from surfacemap.scheduler.scheduler import run_scheduled_scan
+
+    console.print(f"[bold cyan]Starting monitor for {target} every {interval}[/]")
+    console.print("[dim]Press Ctrl+C to stop[/]")
+
+    try:
+        asyncio.run(run_scheduled_scan(
+            target=target, domain=domain, interval=interval,
+            enrich=enrich, passive_only=passive_only,
+        ))
+    except KeyboardInterrupt:
+        console.print("\n[bold red]Monitor stopped[/]")
+
+
+@app.command(name="diff")
+def diff_scans(
+    scan1: str = typer.Argument(help="Path to first scan JSON"),
+    scan2: str = typer.Argument(help="Path to second scan JSON"),
+) -> None:
+    """Compare two scan results and show differences."""
+    import json as _json
+    from surfacemap.core.models import Asset, AssetType, AssetStatus, Severity, ScanResult
+    from surfacemap.scheduler.differ import compute_diff, format_diff_summary
+
+    def _load_scan(path: str) -> ScanResult:
+        with open(path) as f:
+            data = _json.load(f)
+        sr = ScanResult(target=data["target"], scan_id=data["scan_id"])
+        for a in data.get("assets", []):
+            sr.add_asset(Asset(
+                value=a["value"],
+                type=AssetType(a["type"]),
+                status=AssetStatus(a.get("status", "unknown")),
+                severity=Severity(a.get("severity", "info")),
+                source=a.get("source", ""),
+            ))
+        return sr
+
+    try:
+        old = _load_scan(scan1)
+        new = _load_scan(scan2)
+    except Exception as e:
+        console.print(f"[red]Error loading scans:[/] {e}")
+        raise typer.Exit(1)
+
+    result = compute_diff(old, new)
+
+    console.print()
+    console.print(f"[bold cyan]Scan Diff[/]")
+    console.print(f"  Old: {result['old_scan_id']} ({result['old_total']} assets)")
+    console.print(f"  New: {result['new_scan_id']} ({result['new_total']} assets)")
+    console.print()
+    console.print(f"  [green]+{result['added_count']} added[/]  [red]-{result['removed_count']} removed[/]  [yellow]~{result['changed_count']} changed[/]")
+
+    if result["new_critical_findings"]:
+        console.print(f"\n  [bold red]New Critical/High Findings:[/]")
+        for f_item in result["new_critical_findings"]:
+            console.print(f"    [{f_item['severity']}] {f_item['type']}: {f_item['value']}")
+    console.print()
+
+
+@app.command()
+def ui(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to bind"),
+) -> None:
+    """Start the web UI dashboard."""
+    try:
+        import uvicorn
+        from surfacemap.ui.app import ui_app
+    except ImportError:
+        console.print("[red]Install UI dependencies:[/] pip install 'surfacemap[ui]'")
+        raise typer.Exit(1)
+
+    console.print(f"[bold cyan]SurfaceMap Dashboard[/] starting at http://{host}:{port}")
+    uvicorn.run(ui_app, host=host, port=port)
+
+
+@app.command(name="plugins")
+def list_plugins() -> None:
+    """List all loaded plugins."""
+    from surfacemap.plugins.loader import load_plugins
+    from surfacemap.plugins.registry import get_registry
+
+    load_plugins()
+    registry = get_registry()
+    plugins = registry.list_plugins()
+
+    if not plugins:
+        console.print("[dim]No plugins loaded.[/]")
+        console.print("[dim]Place .py files in ~/.surfacemap/plugins/ or install packages with surfacemap.modules entry points.[/]")
+        return
+
+    table = Table(title="Loaded Plugins")
+    table.add_column("Name", style="cyan")
+    table.add_column("Phase")
+    table.add_column("Description", style="dim")
+
+    for p in plugins:
+        table.add_row(p["name"], p["phase"], p["description"])
+
+    console.print(table)
 
 
 if __name__ == "__main__":

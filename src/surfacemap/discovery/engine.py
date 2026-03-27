@@ -76,6 +76,15 @@ from surfacemap.discovery.enrichment import (
     GitHubDorkModule,
     EmailHarvestModule,
 )
+from surfacemap.discovery.external_apis import (
+    CensysModule,
+    BinaryEdgeModule,
+    FullHuntModule,
+    PassiveTotalModule,
+)
+from surfacemap.discovery.crawler import WebCrawlerModule
+from surfacemap.discovery.nuclei import NucleiModule
+from surfacemap.discovery.screenshot import ScreenshotModule
 from surfacemap.analysis.risk import RiskScorer, FalsePositiveFilter
 from surfacemap.analysis.narrative import AttackPathAnalysis, ExecutiveSummary
 
@@ -451,6 +460,20 @@ class DiscoveryEngine:
                 passive_modules.append(VirusTotalModule())
             if self.config.has_github:
                 passive_modules.append(GitHubDorkModule())
+            if self.config.has_censys:
+                passive_modules.append(CensysModule())
+            if self.config.has_binaryedge:
+                passive_modules.append(BinaryEdgeModule())
+            if self.config.has_fullhunt:
+                passive_modules.append(FullHuntModule())
+            if self.config.has_passivetotal:
+                passive_modules.append(PassiveTotalModule())
+
+        from surfacemap.plugins.loader import load_plugins
+        from surfacemap.plugins.registry import get_registry
+        if self.config.enable_plugins:
+            load_plugins()
+            passive_modules.extend(get_registry().get_modules("passive"))
 
         # Run all passive modules concurrently
         # (LLM brainstorm already ran in Phase 0 and seeded domains/subsidiaries)
@@ -509,6 +532,7 @@ class DiscoveryEngine:
             "  [dim]Active Probing[/]", total=1
         )
 
+        # Sub-phase 2a: probing, enumeration (these populate live hosts)
         active_modules: list[DiscoveryModule] = [
             HTTPProbeModule(),
             PortScanModule(),
@@ -530,8 +554,24 @@ class DiscoveryEngine:
         if self.enrich and self.config.has_shodan:
             active_modules.append(ShodanModule())
 
+        if self.config.enable_plugins:
+            from surfacemap.plugins.loader import load_plugins
+            from surfacemap.plugins.registry import get_registry
+            load_plugins()
+            active_modules.extend(get_registry().get_modules("active"))
+
         await self._run_modules_concurrent(
             active_modules, progress, phase_task
+        )
+
+        # Sub-phase 2b: these depend on live hosts from HTTP probe above
+        post_probe_modules: list[DiscoveryModule] = [
+            WebCrawlerModule(),
+            NucleiModule(),
+            ScreenshotModule(),
+        ]
+        await self._run_modules_concurrent(
+            post_probe_modules, progress, phase_task
         )
 
         progress.advance(phase_task)

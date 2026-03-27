@@ -73,6 +73,12 @@ class SurfaceMapConfig:
     shodan_api_key: str = field(default_factory=lambda: os.getenv("SHODAN_API_KEY", ""))
     github_token: str = field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
     hunter_api_key: str = field(default_factory=lambda: os.getenv("HUNTER_API_KEY", ""))
+    censys_api_id: str = field(default_factory=lambda: os.getenv("CENSYS_API_ID", ""))
+    censys_api_secret: str = field(default_factory=lambda: os.getenv("CENSYS_API_SECRET", ""))
+    binaryedge_api_key: str = field(default_factory=lambda: os.getenv("BINARYEDGE_API_KEY", ""))
+    fullhunt_api_key: str = field(default_factory=lambda: os.getenv("FULLHUNT_API_KEY", ""))
+    passivetotal_username: str = field(default_factory=lambda: os.getenv("PASSIVETOTAL_USERNAME", ""))
+    passivetotal_api_key: str = field(default_factory=lambda: os.getenv("PASSIVETOTAL_API_KEY", ""))
 
     # Timeouts (seconds)
     http_timeout: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_HTTP_TIMEOUT", "15")))
@@ -148,6 +154,28 @@ class SurfaceMapConfig:
     # VirusTotal rate limiting (free tier: 4 req/min)
     vt_rate_delay: float = field(default_factory=lambda: float(os.getenv("SURFACEMAP_VT_RATE_DELAY", "15")))
 
+    # Web crawler settings
+    crawl_max_depth: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_CRAWL_MAX_DEPTH", "3")))
+    crawl_max_pages: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_CRAWL_MAX_PAGES", "100")))
+    crawl_timeout: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_CRAWL_TIMEOUT", "300")))
+
+    # Nuclei settings
+    nuclei_severity: str = field(default_factory=lambda: os.getenv("SURFACEMAP_NUCLEI_SEVERITY", "critical,high,medium"))
+    nuclei_rate_limit: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_NUCLEI_RATE_LIMIT", "150")))
+    nuclei_timeout: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_NUCLEI_TIMEOUT", "600")))
+    nuclei_concurrency: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_NUCLEI_CONCURRENCY", "25")))
+    nuclei_templates: str = field(default_factory=lambda: os.getenv("SURFACEMAP_NUCLEI_TEMPLATES", ""))
+
+    # Screenshot settings
+    screenshot_enabled: bool = field(default_factory=lambda: os.getenv("SURFACEMAP_SCREENSHOTS", "false").lower() == "true")
+    screenshot_timeout: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_SCREENSHOT_TIMEOUT", "30")))
+    screenshot_width: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_SCREENSHOT_WIDTH", "1280")))
+    screenshot_height: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_SCREENSHOT_HEIGHT", "720")))
+
+    # Plugin system
+    plugin_dirs: str = field(default_factory=lambda: os.getenv("SURFACEMAP_PLUGIN_DIRS", ""))
+    enable_plugins: bool = field(default_factory=lambda: os.getenv("SURFACEMAP_ENABLE_PLUGINS", "true").lower() == "true")
+
     def ensure_output_dir(self) -> Path:
         """Create and return the output directory."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -178,6 +206,22 @@ class SurfaceMapConfig:
     @property
     def has_hunter(self) -> bool:
         return bool(self.hunter_api_key)
+
+    @property
+    def has_censys(self) -> bool:
+        return bool(self.censys_api_id and self.censys_api_secret)
+
+    @property
+    def has_binaryedge(self) -> bool:
+        return bool(self.binaryedge_api_key)
+
+    @property
+    def has_fullhunt(self) -> bool:
+        return bool(self.fullhunt_api_key)
+
+    @property
+    def has_passivetotal(self) -> bool:
+        return bool(self.passivetotal_username and self.passivetotal_api_key)
 
 
 # Singleton config instance

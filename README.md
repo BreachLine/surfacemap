@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.11+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-  <img src="https://img.shields.io/badge/modules-35+-orange" alt="Modules">
+  <img src="https://img.shields.io/badge/modules-40+-orange" alt="Modules">
 </p>
 
 # SurfaceMap
 
 **LLM-driven attack surface discovery by [BreachLine Labs](https://breachline.io)**
 
-Find every external asset from just a company name. SurfaceMap combines 35+ OSINT data sources, DNS enumeration, HTTP probing, port scanning, vulnerability detection, and LLM intelligence to build a complete map of an organization's attack surface.
+Find every external asset from just a company name. SurfaceMap combines 40+ OSINT data sources, DNS enumeration, HTTP probing, port scanning, vulnerability scanning (Nuclei), web crawling, screenshot capture, and LLM intelligence to build a complete map of an organization's attack surface.
 
 ---
 
@@ -17,10 +17,14 @@ Find every external asset from just a company name. SurfaceMap combines 35+ OSIN
 
 - **Phase 0: LLM Brainstorm** - Deep intelligence gathering with web search enrichment (DuckDuckGo)
 - **Phase 1: Passive Recon** - 20+ concurrent OSINT sources (AnubisDB, CertSpotter, crt.sh, RapidDNS, SubdomainCenter, HackerTarget, Wayback, URLScan, CommonCrawl, and more)
-- **Phase 2: Active Probing** - HTTP probe, port scan (nmap), SSL/TLS analysis, sensitive path fuzzing (60+ paths), JS analysis, CORS check, cookie security, cloud bucket enumeration, subdomain takeover (34 providers + NXDOMAIN detection)
+- **Phase 2: Active Probing** - HTTP probe, port scan (nmap), SSL/TLS analysis, sensitive path fuzzing (60+ paths), JS analysis, CORS check, cookie security, cloud bucket enumeration, subdomain takeover (30 providers + NXDOMAIN detection), web crawling, Nuclei vulnerability scanning (6000+ templates), screenshot capture
 - **Phase 3: LLM Analysis** - Risk scoring (A-F grade), attack path analysis, executive summary, false positive filtering, Google dorks
 - **Interactive Mindmap** - D3.js visualization with zoom/pan, collapsible nodes, dark theme
 - **Dashboard View** - Searchable/filterable/sortable asset table with TXT/CSV/JSON export
+- **Web UI** - `surfacemap ui` launches a web dashboard to browse scan history and results
+- **Scheduled Monitoring** - `surfacemap monitor` runs continuous scans with diff alerts via Slack
+- **CI/CD Integration** - SARIF output for GitHub/GitLab security tabs
+- **Plugin System** - Drop custom modules in `~/.surfacemap/plugins/` or install via entry points
 - **Zero-config start** - Just provide a domain, no API keys required for core features
 
 ## Quick Start
@@ -57,7 +61,7 @@ cd surfacemap
 pip install -e ".[all]"
 ```
 
-**Requirements:** Python 3.11+, optional: `dig`, `nmap`, `subfinder`
+**Requirements:** Python 3.11+, optional: `dig`, `nmap`, `subfinder`, `nuclei`, `katana`, `playwright`
 
 ## CLI Commands
 
@@ -69,6 +73,10 @@ pip install -e ".[all]"
 | `surfacemap set-config <key> <value>` | Change any config setting |
 | `surfacemap set-key <name> <value>` | Set an API key in .env |
 | `surfacemap show-keys` | Show configured API keys |
+| `surfacemap monitor <target>` | Start continuous monitoring with diff alerts |
+| `surfacemap diff <old.json> <new.json>` | Compare two scan results |
+| `surfacemap ui` | Start the web UI dashboard |
+| `surfacemap plugins` | List loaded plugins |
 | `surfacemap version` | Show version + check for updates |
 | `surfacemap update` | Auto-update from GitHub |
 
@@ -84,6 +92,7 @@ Options:
   -m, --mindmap           Generate interactive HTML mindmap
   -j, --json              Export results to JSON
   --csv                   Export results to CSV
+  --sarif                 Export SARIF for GitHub/GitLab security tabs
   -e, --enrich            Enable enrichment modules (requires API keys)
   --passive-only          Skip active probing
   --no-analysis           Skip LLM analysis phase
@@ -117,6 +126,10 @@ All core features work without API keys. Optional keys unlock additional data so
 | `GITHUB_TOKEN` | GitHub secret/code search | 30 req/min |
 | `HUNTER_API_KEY` | Email harvesting | 25/month |
 | `SECURITYTRAILS_API_KEY` | Subdomain history | 50/month |
+| `CENSYS_API_ID` + `CENSYS_API_SECRET` | Host/cert search | 250/month |
+| `BINARYEDGE_API_KEY` | Subdomain enumeration | 250/month |
+| `FULLHUNT_API_KEY` | Subdomain + host data | 100/month |
+| `PASSIVETOTAL_USERNAME` + `PASSIVETOTAL_API_KEY` | Passive DNS enrichment | 15/day |
 
 ```bash
 # Set keys via CLI (persists to .env)
@@ -128,7 +141,7 @@ cp .env.example .env
 # Edit .env with your keys
 ```
 
-## Discovery Modules (35+)
+## Discovery Modules (40+)
 
 ### Phase 0: LLM Brainstorm
 | Module | Description |
@@ -161,6 +174,10 @@ cp .env.example .env
 | VirusTotal | Subdomain + IP enrichment | Optional |
 | GitHub Dorking | Secret/code search | Optional |
 | Email Harvest | Hunter.io + regex fallback | Optional |
+| Censys | Host and certificate search | Optional |
+| BinaryEdge | Subdomain enumeration | Optional |
+| FullHunt | Subdomain + host data | Optional |
+| PassiveTotal | Passive DNS enrichment | Optional |
 
 ### Phase 2: Active Probing (concurrent)
 | Module | Description | Key Required |
@@ -173,11 +190,14 @@ cp .env.example .env
 | CORS Check | Origin reflection, wildcard, credentials | No |
 | Cookie Security | Secure/HttpOnly/SameSite flags | No |
 | Cloud Storage | S3/Azure/GCS bucket enumeration | No |
-| Subdomain Takeover | 34 providers + NXDOMAIN + NS delegation | No |
+| Subdomain Takeover | 30 providers + NXDOMAIN + NS delegation | No |
 | Reverse DNS | PTR lookups | No |
 | Reverse IP | Find domains sharing IPs | No |
 | Shodan InternetDB | Ports, vulns, hostnames (free, no key) | No |
 | IPInfo | IP geolocation, ASN, org | No |
+| Web Crawler | Crawls live sites for hidden pages, forms, params (Katana or built-in) | No |
+| Nuclei Scanner | 6000+ vulnerability templates | No |
+| Screenshot Capture | Headless browser screenshots of live hosts (Playwright or Chrome) | No |
 | Shodan (full) | Banner data, CVEs | Optional |
 
 ### Phase 3: LLM Analysis
@@ -196,6 +216,8 @@ cp .env.example .env
 - **JSON** - Full structured scan results
 - **CSV** - Spreadsheet-compatible export
 - **CLI Tree** - Rich terminal tree display
+- **SARIF** - GitHub/GitLab Security tab integration
+- **Screenshots** - PNG screenshots of live hosts
 
 ## Configuration
 
@@ -241,12 +263,17 @@ Phase 1: Passive Recon (20+ modules concurrent)
     |-- Subdomain Permutation + ASN Discovery
     |
     v
-Phase 2: Active Probing (14 modules concurrent)
+Phase 2a: Active Probing (14 modules concurrent)
     |-- HTTP Probe (shared client, connection pooling)
     |-- Port Scan (nmap)
     |-- SSL/TLS, Sensitive Paths, JS Analysis
-    |-- CORS, Cookies, Cloud, Takeover (34 providers)
+    |-- CORS, Cookies, Cloud, Takeover (30 providers)
     |-- Reverse DNS/IP, Shodan InternetDB, IPInfo
+    |
+Phase 2b: Post-Probe (depends on live hosts from 2a)
+    |-- Web Crawler (Katana or built-in BFS spider)
+    |-- Nuclei Vulnerability Scanner (6000+ templates)
+    |-- Screenshot Capture (Playwright or headless Chrome)
     |
     v
 Phase 3: LLM Analysis (sequential)

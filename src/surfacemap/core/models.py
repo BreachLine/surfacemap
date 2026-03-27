@@ -43,6 +43,9 @@ class AssetType(str, Enum):
     CORS_MISCONFIGURATION = "cors_misconfiguration"
     COOKIE_ISSUE = "cookie_issue"
     DNS_ISSUE = "dns_issue"
+    FORM = "form"
+    PARAMETER = "parameter"
+    VULNERABILITY = "vulnerability"
 
 
 class AssetStatus(str, Enum):
