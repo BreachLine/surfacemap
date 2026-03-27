@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.1.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.11+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
   <img src="https://img.shields.io/badge/modules-40+-orange" alt="Modules">

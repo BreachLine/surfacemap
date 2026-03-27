@@ -6,5 +6,5 @@ cloud storage enumeration, and LLM intelligence to build a complete
 attack surface map.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __author__ = "BreachLine Labs"
