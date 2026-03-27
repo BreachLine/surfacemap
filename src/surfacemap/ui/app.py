@@ -158,7 +158,7 @@ def _render_status_rows(status_counts: dict) -> str:
     return "".join(rows)
 
 
-@ui_app.get("/scans/{{scan_id}}", response_class=HTMLResponse)
+@ui_app.get("/scans/{scan_id}", response_class=HTMLResponse)
 async def scan_detail(scan_id: str):
     db = await get_db()
     scan = await db.get_scan(scan_id)
@@ -305,7 +305,7 @@ function filterAssets() {{
 </body></html>"""
 
 
-@ui_app.get("/mindmap/{{scan_id}}")
+@ui_app.get("/mindmap/{scan_id}")
 async def serve_mindmap(scan_id: str):
     """Serve mind map HTML file for iframe embedding."""
     output_dir = Path("output")
