@@ -833,7 +833,7 @@ if (root.children) {{
   root.children.forEach(child => collapseAll(child));
 }}
 
-const treelayout = d3.tree().nodeSize([20, 280]);
+const treelayout = d3.tree().nodeSize([28, 320]);
 const tooltip = d3.select("#tooltip");
 const tipName = tooltip.select(".tip-name");
 const tipDetails = tooltip.select(".tip-details");
@@ -856,7 +856,15 @@ function update(source) {{
     .attr("transform", () => `translate(${{source.y0}},${{source.x0}})`)
     .on("click", (e, d) => {{
       if (d.children) {{ d._children = d.children; d.children = null; }}
-      else if (d._children) {{ d.children = d._children; d._children = null; }}
+      else if (d._children) {{
+        d.children = d._children; d._children = null;
+        // Performance: if too many children, only show first 50 + "more" node
+        if (d.children && d.children.length > 50) {{
+          const extra = d.children.length - 50;
+          d.children = d.children.slice(0, 50);
+          d.children.push({{data: {{name: `... +${{extra}} more`, type: 'truncated'}}, children: null, _children: null}});
+        }}
+      }}
       update(d);
     }})
     .on("mouseover", (e, d) => {{
@@ -890,10 +898,10 @@ function update(source) {{
   // Node circles
   nodeEnter.append("circle")
     .attr("r", d => {{
-      if (d.depth === 0) return 10;
-      if (d.depth === 1) return 7;
-      if (d.children || d._children) return 5;
-      return 3.5;
+      if (d.depth === 0) return 14;
+      if (d.depth === 1) return 10;
+      if (d.children || d._children) return 7;
+      return 5;
     }})
     .style("fill", d => {{
       if (d.depth === 0) return "{root_color}";
@@ -953,10 +961,10 @@ function update(source) {{
 
   // ---- Transitions ----
   const nodeUpdate = nodeEnter.merge(node);
-  nodeUpdate.transition().duration(350)
+  nodeUpdate.transition().duration(100)
     .attr("transform", d => `translate(${{d.y}},${{d.x}})`);
 
-  const nodeExit = node.exit().transition().duration(350)
+  const nodeExit = node.exit().transition().duration(100)
     .attr("transform", () => `translate(${{source.y}},${{source.x}})`)
     .remove();
   nodeExit.select("circle").attr("r", 1e-6);
@@ -977,10 +985,10 @@ function update(source) {{
       return '#21262d';
     }});
 
-  linkEnter.merge(link).transition().duration(350)
+  linkEnter.merge(link).transition().duration(100)
     .attr("d", d => diagonal(d.source, d.target));
 
-  link.exit().transition().duration(350)
+  link.exit().transition().duration(100)
     .attr("d", () => {{
       const o = {{ x: source.x, y: source.y }};
       return diagonal(o, o);
