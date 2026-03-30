@@ -555,11 +555,18 @@ class LeakIXModule(DiscoveryModule):
             logger.warning("[%s] Invalid JSON response: %s", self.name, exc)
             return
 
-        if not isinstance(data, list):
-            data = [data] if isinstance(data, dict) else []
+        # LeakIX returns {"Services": [...], "Leaks": [...]}
+        if isinstance(data, dict):
+            entries = (data.get("Services") or []) + (data.get("Leaks") or [])
+        elif isinstance(data, list):
+            entries = data
+        else:
+            logger.warning("[%s] Unexpected response type %s", self.name, type(data).__name__)
+            return
 
-        count = 0
-        for entry in data:
+        svc_count = 0
+        leak_count = 0
+        for entry in entries:
             ip = entry.get("ip", "")
             host = entry.get("host", "")
             port = entry.get("port", "")
@@ -569,17 +576,20 @@ class LeakIXModule(DiscoveryModule):
                 result.add_asset(Asset(value=ip, type=AssetType.IP, source=self.name, parent=target))
             if ip and port:
                 result.add_asset(Asset(value=f"{ip}:{port}", type=AssetType.PORT, source=self.name, parent=ip))
-            for leak in entry.get("events", []):
-                leak_type = leak.get("event_type", "")
-                if leak_type and (host or ip):
-                    result.add_asset(Asset(
-                        value=f"{leak_type} on {host or ip}:{port}",
-                        type=AssetType.SECRET_LEAK, severity=Severity.HIGH,
-                        source=self.name, parent=host or ip,
-                        metadata={"leak_type": leak_type, "host": host, "port": port},
-                    ))
-                    count += 1
-        logger.info("[%s] Discovered %d leak events for %s", self.name, count, target)
+                svc_count += 1
+
+            # Leaks have event_source and severity
+            event_source = entry.get("event_source", "")
+            severity_str = entry.get("severity", "")
+            if severity_str in ("high", "critical") and (host or ip):
+                result.add_asset(Asset(
+                    value=f"{event_source} on {host or ip}:{port}",
+                    type=AssetType.SECRET_LEAK, severity=Severity.HIGH,
+                    source=self.name, parent=host or ip,
+                    metadata={"event_source": event_source, "host": host, "port": port},
+                ))
+                leak_count += 1
+        logger.info("[%s] Discovered %d services, %d leaks for %s", self.name, svc_count, leak_count, target)
 
 
 # ---------------------------------------------------------------------------
