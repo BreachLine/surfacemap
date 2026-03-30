@@ -81,6 +81,14 @@ from surfacemap.discovery.external_apis import (
     BinaryEdgeModule,
     FullHuntModule,
     PassiveTotalModule,
+    ONYPHEModule,
+    GreyNoiseModule,
+    FOFAModule,
+    LeakIXModule,
+    IntelXModule,
+    VulnersModule,
+    PulsediveModule,
+    ZoomEyeModule,
 )
 from surfacemap.discovery.crawler import WebCrawlerModule
 from surfacemap.discovery.nuclei import NucleiModule
@@ -468,6 +476,18 @@ class DiscoveryEngine:
                 passive_modules.append(FullHuntModule())
             if self.config.has_passivetotal:
                 passive_modules.append(PassiveTotalModule())
+            if self.config.has_onyphe:
+                passive_modules.append(ONYPHEModule())
+            if self.config.has_fofa:
+                passive_modules.append(FOFAModule())
+            if self.config.has_leakix:
+                passive_modules.append(LeakIXModule())
+            if self.config.has_intelx:
+                passive_modules.append(IntelXModule())
+            if self.config.has_pulsedive:
+                passive_modules.append(PulsediveModule())
+            if self.config.has_zoomeye:
+                passive_modules.append(ZoomEyeModule())
 
         from surfacemap.plugins.loader import load_plugins
         from surfacemap.plugins.registry import get_registry
@@ -570,6 +590,10 @@ class DiscoveryEngine:
             NucleiModule(),
             ScreenshotModule(),
         ]
+        if self.enrich and self.config.has_vulners:
+            post_probe_modules.append(VulnersModule())
+        if self.enrich and self.config.has_greynoise:
+            post_probe_modules.append(GreyNoiseModule())
         await self._run_modules_concurrent(
             post_probe_modules, progress, phase_task
         )

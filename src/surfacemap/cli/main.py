@@ -480,6 +480,15 @@ def show_keys() -> None:
         ("PASSIVETOTAL_USERNAME", config.passivetotal_username, "PassiveTotal enrichment"),
         ("PASSIVETOTAL_API_KEY", config.passivetotal_api_key, "PassiveTotal enrichment"),
         ("SECURITYTRAILS_API_KEY", "", "SecurityTrails subdomains"),
+        ("ONYPHE_API_KEY", config.onyphe_api_key, "ONYPHE internet scanning"),
+        ("GREYNOISE_API_KEY", config.greynoise_api_key, "GreyNoise IP reputation"),
+        ("FOFA_EMAIL", config.fofa_email, "FOFA search"),
+        ("FOFA_API_KEY", config.fofa_api_key, "FOFA search"),
+        ("LEAKIX_API_KEY", config.leakix_api_key, "LeakIX data leaks"),
+        ("INTELX_API_KEY", config.intelx_api_key, "IntelX phonebook"),
+        ("VULNERS_API_KEY", config.vulners_api_key, "Vulners CVE lookup"),
+        ("PULSEDIVE_API_KEY", config.pulsedive_api_key, "Pulsedive threat intel"),
+        ("ZOOMEYE_API_KEY", config.zoomeye_api_key, "ZoomEye host search"),
     ]
 
     import os

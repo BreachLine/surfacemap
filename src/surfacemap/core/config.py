@@ -79,6 +79,15 @@ class SurfaceMapConfig:
     fullhunt_api_key: str = field(default_factory=lambda: os.getenv("FULLHUNT_API_KEY", ""))
     passivetotal_username: str = field(default_factory=lambda: os.getenv("PASSIVETOTAL_USERNAME", ""))
     passivetotal_api_key: str = field(default_factory=lambda: os.getenv("PASSIVETOTAL_API_KEY", ""))
+    onyphe_api_key: str = field(default_factory=lambda: os.getenv("ONYPHE_API_KEY", ""))
+    greynoise_api_key: str = field(default_factory=lambda: os.getenv("GREYNOISE_API_KEY", ""))
+    fofa_email: str = field(default_factory=lambda: os.getenv("FOFA_EMAIL", ""))
+    fofa_api_key: str = field(default_factory=lambda: os.getenv("FOFA_API_KEY", ""))
+    leakix_api_key: str = field(default_factory=lambda: os.getenv("LEAKIX_API_KEY", ""))
+    intelx_api_key: str = field(default_factory=lambda: os.getenv("INTELX_API_KEY", ""))
+    vulners_api_key: str = field(default_factory=lambda: os.getenv("VULNERS_API_KEY", ""))
+    pulsedive_api_key: str = field(default_factory=lambda: os.getenv("PULSEDIVE_API_KEY", ""))
+    zoomeye_api_key: str = field(default_factory=lambda: os.getenv("ZOOMEYE_API_KEY", ""))
 
     # Timeouts (seconds)
     http_timeout: int = field(default_factory=lambda: int(os.getenv("SURFACEMAP_HTTP_TIMEOUT", "15")))
@@ -222,6 +231,38 @@ class SurfaceMapConfig:
     @property
     def has_passivetotal(self) -> bool:
         return bool(self.passivetotal_username and self.passivetotal_api_key)
+
+    @property
+    def has_onyphe(self) -> bool:
+        return bool(self.onyphe_api_key)
+
+    @property
+    def has_greynoise(self) -> bool:
+        return bool(self.greynoise_api_key)
+
+    @property
+    def has_fofa(self) -> bool:
+        return bool(self.fofa_email and self.fofa_api_key)
+
+    @property
+    def has_leakix(self) -> bool:
+        return bool(self.leakix_api_key)
+
+    @property
+    def has_intelx(self) -> bool:
+        return bool(self.intelx_api_key)
+
+    @property
+    def has_vulners(self) -> bool:
+        return bool(self.vulners_api_key)
+
+    @property
+    def has_pulsedive(self) -> bool:
+        return bool(self.pulsedive_api_key)
+
+    @property
+    def has_zoomeye(self) -> bool:
+        return bool(self.zoomeye_api_key)
 
 
 # Singleton config instance
