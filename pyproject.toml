@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "surfacemap"
-version = "2.1.1"
+version = "2.2.0"
 description = "LLM-driven attack surface discovery — find every asset from just a company name"
 readme = "README.md"
 license = "MIT"
@@ -63,7 +63,7 @@ Issues = "https://github.com/BreachLine/surfacemap/issues"
 surfacemap = "surfacemap.cli.main:app"
 
 [tool.hatch.build.targets.sdist]
-exclude = [".claude/", "test-output/", "output/", "*.db"]
+exclude = [".claude/", ".env", ".env.*", "test-output/", "output/", "*.db"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/surfacemap"]

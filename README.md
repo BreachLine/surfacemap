@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.1-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/python-3.11+-green" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-  <img src="https://img.shields.io/badge/modules-40+-orange" alt="Modules">
+  <img src="https://img.shields.io/badge/modules-48+-orange" alt="Modules">
 </p>
 
 # SurfaceMap
 
 **LLM-driven attack surface discovery by [BreachLine Labs](https://breachline.io)**
 
-Find every external asset from just a company name. SurfaceMap combines 40+ OSINT data sources, DNS enumeration, HTTP probing, port scanning, vulnerability scanning (Nuclei), web crawling, screenshot capture, and LLM intelligence to build a complete map of an organization's attack surface.
+Find every external asset from just a company name. SurfaceMap combines 48+ OSINT data sources, DNS enumeration, HTTP probing, port scanning, vulnerability scanning (Nuclei), web crawling, screenshot capture, and LLM intelligence to build a complete map of an organization's attack surface.
 
 ---
 
@@ -130,6 +130,14 @@ All core features work without API keys. Optional keys unlock additional data so
 | `BINARYEDGE_API_KEY` | Subdomain enumeration | 250/month |
 | `FULLHUNT_API_KEY` | Subdomain + host data | 100/month |
 | `PASSIVETOTAL_USERNAME` + `PASSIVETOTAL_API_KEY` | Passive DNS enrichment | 15/day |
+| `ONYPHE_API_KEY` | Internet scanning (ports, services) | 50 req/month |
+| `GREYNOISE_API_KEY` | IP reputation classification | Unlimited community |
+| `FOFA_EMAIL` + `FOFA_API_KEY` | Chinese internet asset search | Limited free |
+| `LEAKIX_API_KEY` | Data leak detection | Free |
+| `INTELX_API_KEY` | Dark web phonebook (subdomains, emails) | Free dev |
+| `VULNERS_API_KEY` | CVE lookup for technologies | Free |
+| `PULSEDIVE_API_KEY` | Threat intelligence scoring | Free |
+| `ZOOMEYE_API_KEY` | Internet device search | 10k/month |
 
 ```bash
 # Set keys via CLI (persists to .env)
@@ -141,7 +149,7 @@ cp .env.example .env
 # Edit .env with your keys
 ```
 
-## Discovery Modules (40+)
+## Discovery Modules (48+)
 
 ### Phase 0: LLM Brainstorm
 | Module | Description |
@@ -178,6 +186,12 @@ cp .env.example .env
 | BinaryEdge | Subdomain enumeration | Optional |
 | FullHunt | Subdomain + host data | Optional |
 | PassiveTotal | Passive DNS enrichment | Optional |
+| ONYPHE | Internet scanning (ports, services) | Optional |
+| FOFA | Chinese internet asset search | Optional |
+| LeakIX | Exposed services and data leak detection | Optional |
+| IntelX | Dark web phonebook (subdomains, emails) | Optional |
+| Pulsedive | Threat intelligence and risk scoring | Optional |
+| ZoomEye | Internet device search (IPs, ports) | Optional |
 
 ### Phase 2: Active Probing (concurrent)
 | Module | Description | Key Required |
@@ -199,6 +213,8 @@ cp .env.example .env
 | Nuclei Scanner | 6000+ vulnerability templates | No |
 | Screenshot Capture | Headless browser screenshots of live hosts (Playwright or Chrome) | No |
 | Shodan (full) | Banner data, CVEs | Optional |
+| GreyNoise | IP reputation enrichment (noise/benign classification) | Optional |
+| Vulners | CVE lookup for discovered technologies | Optional |
 
 ### Phase 3: LLM Analysis
 | Module | Description |
@@ -254,10 +270,11 @@ GET  /health            # Health check
 Phase 0: LLM Brainstorm (web search + deep thinking)
     |
     v
-Phase 1: Passive Recon (20+ modules concurrent)
+Phase 1: Passive Recon (28+ modules concurrent)
     |-- DNS + Subdomain Discovery
     |-- Certificate Transparency
     |-- OSINT APIs (AnubisDB, CertSpotter, RapidDNS, etc.)
+    |-- Threat Intel (ONYPHE, LeakIX, IntelX, Pulsedive, ZoomEye, FOFA)
     |-- WHOIS, ASN, Zone Transfer, Email Security
     |-- Subsidiary deep recon (DNS + subs + CT per subsidiary)
     |-- Subdomain Permutation + ASN Discovery
@@ -274,6 +291,7 @@ Phase 2b: Post-Probe (depends on live hosts from 2a)
     |-- Web Crawler (Katana or built-in BFS spider)
     |-- Nuclei Vulnerability Scanner (6000+ templates)
     |-- Screenshot Capture (Playwright or headless Chrome)
+    |-- GreyNoise IP Reputation, Vulners CVE Lookup
     |
     v
 Phase 3: LLM Analysis (sequential)
